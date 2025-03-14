@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Review Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="batch_upload.css">
+</head>
+<body>
+    <div class="navbar">
+        <a href="index.html">Home</a>
+        <a href="single_review.html">Single Review</a>
+        <a href="batch_upload.html">Batch Upload</a>
+    </div>
+    <div class="container">
+        <h1>Batch Review Analyzer</h1>
+        <p>Upload a CSV to analyze multiple reviews</p>
+        <input type="file" id="csvInput" accept=".csv">
+        <button onclick="analyzeBatch()">Analyze</button>
+        <div id="result"></div>
+        <canvas id="pieChart"></canvas>
+    </div>
+
+    <script>
+        let chartInstance = null;
+
+        async function analyzeBatch() {
+            const fileInput = document.getElementById('csvInput');
+            const resultDiv = document.getElementById('result');
+            const button = document.querySelector('button');
+            const pieChartCanvas = document.getElementById('pieChart');
+
+            if (!fileInput.files.length) {
+                resultDiv.innerText = "Please upload a CSV file!";
+                return;
+            }
+
+            button.disabled = true;
+            button.innerText = "Analyzing...";
+
+            try {
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('http://localhost:5000/analyze-batch', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    resultDiv.innerText = `Error: ${data.error}`;
+                    pieChartCanvas.style.display = 'none';
+                } else {
+                    const positivePercent = ((data.positive / data.total) * 100).toFixed(1);
+                    const negativePercent = ((data.negative / data.total) * 100).toFixed(1);
+                    resultDiv.innerHTML = `
+                        <div>Positive Reviews: <span class="positive">${data.positive}</span> (${positivePercent}%)</div>
+                        <div>Negative Reviews: <span class="negative">${data.negative}</span> (${negativePercent}%)</div>
+                        <div>Total Reviews: ${data.total}</div>
+                    `;
+
+                    if (chartInstance) {
+                        chartInstance.destroy();
+                    }
+
+                    pieChartCanvas.style.display = 'block';
+                    const ctx = pieChartCanvas.getContext('2d');
+                    chartInstance = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: ['Positive', 'Negative'],
+                            datasets: [{
+                                data: [data.positive, data.negative],
+                                backgroundColor: ['#28a745', '#dc3545'],
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { position: 'bottom' }
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                resultDiv.innerText = "Error: Could not connect to server or endpoint not implemented";
+                pieChartCanvas.style.display = 'none';
+            } finally {
+                button.disabled = false;
+                button.innerText = "Analyze";
+            }
+        }
+    </script>
+</body>
+</html>
