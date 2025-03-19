@@ -16,7 +16,12 @@
         <h1>Single Review Classifier</h1>
         <p>Classify a single customer review</p>
         <textarea id="reviewInput" placeholder="e.g., 'The product was amazing and delivered on time!'"></textarea>
-        <button onclick="classifyReview()">Classify</button>
+        
+        <div class="btn-container">
+            <button onclick="classifyReview()">Classify</button>
+            <button class="secondary" onclick="clearReview()">Clear</button>
+        </div>
+        
         <div id="result"></div>
     </div>
 
@@ -24,7 +29,7 @@
         async function classifyReview() {
             const review = document.getElementById('reviewInput').value.trim();
             const resultDiv = document.getElementById('result');
-            const button = document.querySelector('button');
+            const classifyButton = document.querySelector('button');
 
             if (!review) {
                 resultDiv.innerText = "Please enter a review!";
@@ -32,8 +37,8 @@
                 return;
             }
 
-            button.disabled = true;
-            button.innerText = "Classifying...";
+            classifyButton.disabled = true;
+            classifyButton.innerText = "Classifying...";
 
             try {
                 const response = await fetch('http://localhost:5000/predict', {
@@ -55,9 +60,15 @@
                 resultDiv.innerText = "Error: Could not connect to server";
                 resultDiv.className = "";
             } finally {
-                button.disabled = false;
-                button.innerText = "Classify";
+                classifyButton.disabled = false;
+                classifyButton.innerText = "Classify";
             }
+        }
+
+        function clearReview() {
+            document.getElementById('reviewInput').value = "";
+            document.getElementById('result').innerText = "";
+            document.getElementById('result').className = "";
         }
     </script>
 </body>
