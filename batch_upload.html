@@ -16,19 +16,26 @@
     <div class="container">
         <h1>Batch Review Analyzer</h1>
         <p>Upload a CSV to analyze multiple reviews</p>
-        <input type="file" id="csvInput" accept=".csv">
+        <input type="file" id="csvInput" accept=".csv" onchange="fileUploaded()">
         <button onclick="analyzeBatch()">Analyze</button>
+        <button id="downloadCsv" onclick="downloadCsv()" disabled>Download CSV</button>
         <div id="result"></div>
         <canvas id="pieChart"></canvas>
     </div>
 
     <script>
         let chartInstance = null;
+        let lastAnalysisData = null; // Store last analysis result
+
+        function fileUploaded() {
+            alert("File uploaded successfully");
+        }
 
         async function analyzeBatch() {
             const fileInput = document.getElementById('csvInput');
             const resultDiv = document.getElementById('result');
-            const button = document.querySelector('button');
+            const analyzeButton = document.querySelector('button');
+            const downloadButton = document.getElementById('downloadCsv');
             const pieChartCanvas = document.getElementById('pieChart');
 
             if (!fileInput.files.length) {
@@ -36,8 +43,8 @@
                 return;
             }
 
-            button.disabled = true;
-            button.innerText = "Analyzing...";
+            analyzeButton.disabled = true;
+            analyzeButton.innerText = "Analyzing...";
 
             try {
                 const file = fileInput.files[0];
@@ -53,44 +60,93 @@
                 if (data.error) {
                     resultDiv.innerText = `Error: ${data.error}`;
                     pieChartCanvas.style.display = 'none';
+                    downloadButton.disabled = true;
                 } else {
-                    const positivePercent = ((data.positive / data.total) * 100).toFixed(1);
-                    const negativePercent = ((data.negative / data.total) * 100).toFixed(1);
-                    resultDiv.innerHTML = `
-                        <div>Positive Reviews: <span class="positive">${data.positive}</span> (${positivePercent}%)</div>
-                        <div>Negative Reviews: <span class="negative">${data.negative}</span> (${negativePercent}%)</div>
-                        <div>Total Reviews: ${data.total}</div>
-                    `;
-
-                    if (chartInstance) {
-                        chartInstance.destroy();
-                    }
-
-                    pieChartCanvas.style.display = 'block';
-                    const ctx = pieChartCanvas.getContext('2d');
-                    chartInstance = new Chart(ctx, {
-                        type: 'pie',
-                        data: {
-                            labels: ['Positive', 'Negative'],
-                            datasets: [{
-                                data: [data.positive, data.negative],
-                                backgroundColor: ['#28a745', '#dc3545'],
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: { position: 'bottom' }
-                            }
-                        }
-                    });
+                    lastAnalysisData = data; // Store the result
+                    displayAnalysisResult(data);
+                    downloadButton.disabled = false;
                 }
             } catch (error) {
                 resultDiv.innerText = "Error: Could not connect to server or endpoint not implemented";
                 pieChartCanvas.style.display = 'none';
+                downloadButton.disabled = true;
             } finally {
-                button.disabled = false;
-                button.innerText = "Analyze";
+                analyzeButton.disabled = false;
+                analyzeButton.innerText = "Analyze";
+            }
+        }
+
+        function displayAnalysisResult(data) {
+            const resultDiv = document.getElementById('result');
+            const pieChartCanvas = document.getElementById('pieChart');
+            
+            const positivePercent = ((data.positive / data.total) * 100).toFixed(1);
+            const negativePercent = ((data.negative / data.total) * 100).toFixed(1);
+            resultDiv.innerHTML = `
+                <div>Positive Reviews: <span class="positive">${data.positive}</span> (${positivePercent}%)</div>
+                <div>Negative Reviews: <span class="negative">${data.negative}</span> (${negativePercent}%)</div>
+                <div>Total Reviews: ${data.total}</div>
+            `;
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            pieChartCanvas.style.display = 'block';
+            const ctx = pieChartCanvas.getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Positive', 'Negative'],
+                    datasets: [{
+                        data: [data.positive, data.negative],
+                        backgroundColor: ['#28a745', '#dc3545'],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        async function downloadCsv() {
+            const fileInput = document.getElementById('csvInput');
+            if (!fileInput.files.length) {
+                alert("Please upload a CSV file first!");
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('http://localhost:5000/generate-csv', {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to generate CSV');
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'predicted_reviews.csv';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+
+                if (lastAnalysisData) {
+                    displayAnalysisResult(lastAnalysisData); // Re-display analysis after download
+                }
+            } catch (error) {
+                alert("Error downloading CSV: " + error.message);
             }
         }
     </script>

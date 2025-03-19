@@ -1,8 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import joblib
 import pandas as pd
 import numpy as np
+import os
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -35,46 +36,59 @@ def predict():
 @app.route('/analyze-batch', methods=['POST'])
 def analyze_batch():
     try:
-        # Check if a file is uploaded
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
         
         file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+        if file.filename == '' or not file.filename.endswith('.csv'):
+            return jsonify({'error': 'Invalid file. Please upload a CSV file'}), 400
         
-        if not file.filename.endswith('.csv'):
-            return jsonify({'error': 'File must be a CSV'}), 400
-
-        # Read the CSV file
         df = pd.read_csv(file)
-        
-        # Check if 'review' column exists
         if 'review' not in df.columns:
             return jsonify({'error': 'CSV must contain a "review" column'}), 400
         
-        # Handle missing or empty reviews
         reviews = df['review'].dropna().astype(str).tolist()
         if not reviews:
             return jsonify({'error': 'No valid reviews found in the CSV'}), 400
-
-        # Preprocess all reviews using the TF-IDF Vectorizer
+        
         review_vectors = vectorizer.transform(reviews)
-
-        # Make predictions for all reviews
         predictions = model.predict(review_vectors)
-
-        # Count positive and negative reviews
-        positive_count = np.sum(predictions == 1)  # Assuming 1 = positive
-        negative_count = np.sum(predictions == 0)  # Assuming 0 = negative
+        
+        positive_count = np.sum(predictions == 1)
+        negative_count = np.sum(predictions == 0)
         total_count = len(reviews)
+        
+        return jsonify({'positive': int(positive_count), 'negative': int(negative_count), 'total': int(total_count)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-        # Return the result as JSON
-        return jsonify({
-            'positive': int(positive_count),
-            'negative': int(negative_count),
-            'total': int(total_count)
-        })
+# Generate CSV with predictions endpoint
+@app.route('/generate-csv', methods=['POST'])
+def generate_csv():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '' or not file.filename.endswith('.csv'):
+            return jsonify({'error': 'Invalid file. Please upload a CSV file'}), 400
+        
+        df = pd.read_csv(file)
+        if 'review' not in df.columns:
+            return jsonify({'error': 'CSV must contain a "review" column'}), 400
+        
+        reviews = df['review'].dropna().astype(str).tolist()
+        if not reviews:
+            return jsonify({'error': 'No valid reviews found in the CSV'}), 400
+        
+        review_vectors = vectorizer.transform(reviews)
+        predictions = model.predict(review_vectors)
+        df['label'] = ['Good' if pred == 1 else 'Bad' for pred in predictions]
+        
+        output_path = "predicted_reviews.csv"
+        df.to_csv(output_path, index=False)
+        
+        return send_file(output_path, as_attachment=True)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
